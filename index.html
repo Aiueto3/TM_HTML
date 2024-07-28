@@ -21,6 +21,9 @@
             justify-content: center;
             align-items: center;
         }
+        #image-container {
+            margin-top: 10px;
+        }
         canvas {
             width: 80%;
             height: auto;
@@ -33,12 +36,19 @@
                 height: auto;
             }
         }
+        #image-container img {
+            width: 300px;
+            height: 300px;
+            object-fit: contain; /* 画像のアスペクト比を保持しながらサイズを調整 */
+        }
     </style>
 </head>
 <body>
-    <div>Teachable Machine Image Model</div>
+    <div>端子アシスタント</div>
     <div id="webcam-container"></div>
     <div id="label-container"></div>
+    <div>↓このポートに挿しこみます。</div>
+    <div id="image-container"></div>
 
     <script type="text/javascript">
         // More API functions here:
@@ -48,6 +58,23 @@
         const URL = "https://teachablemachine.withgoogle.com/models/-Pk3WEGh1/";
 
         let model, webcam, labelContainer, maxPredictions;
+        let previousPrediction = null;
+        let predictionCount = 0;
+        const predictionThreshold = 5; // 同じ予測が必要な回数
+        const changeInterval = 1000; // 画像を変更する間隔（ミリ秒）
+        let lastChangeTime = 0;
+        const confidenceThreshold = 0.7; // 確率のしきい値
+
+        // 予測結果に基づく画像ファイル名のマッピング
+        const imageMap = {
+            "USB Type-A": "Type-A.jpg",
+            "USB Micro-B": "Micro-B.jpg",
+            "USB Type-C": "Type-C.jpg",
+            "HDMI": "HDMI.jpg",
+            "Lightning": "Lightning.jpg",
+            "3.5mm": "3.5mm.jpg",
+            "RJ45": "RJ45.jpg"
+        };
 
         // Load the image model and setup the webcam
         async function init() {
@@ -86,10 +113,40 @@
         async function predict() {
             // predict can take in an image, video or canvas html element
             const prediction = await model.predict(webcam.canvas);
+            let highestPrediction = { className: null, probability: 0 };
+
             for (let i = 0; i < maxPredictions; i++) {
                 const classPrediction =
                     prediction[i].className + ": " + prediction[i].probability.toFixed(2);
                 labelContainer.childNodes[i].innerHTML = classPrediction;
+
+                // 最も高い確率のクラスを見つける
+                if (prediction[i].probability > highestPrediction.probability) {
+                    highestPrediction = prediction[i];
+                }
+            }
+
+            // しきい値を超えた場合のみ表示を更新
+            if (highestPrediction.probability >= confidenceThreshold) {
+                // 連続して同じ予測結果の場合のみ表示を更新
+                if (previousPrediction === highestPrediction.className) {
+                    predictionCount++;
+                } else {
+                    predictionCount = 1;
+                    previousPrediction = highestPrediction.className;
+                }
+
+                const currentTime = Date.now();
+                if (predictionCount >= predictionThreshold && (currentTime - lastChangeTime) > changeInterval) {
+                    // 画像を表示する
+                    const imageContainer = document.getElementById("image-container");
+                    if (highestPrediction.className && imageMap[highestPrediction.className]) {
+                        imageContainer.innerHTML = `<img src="${imageMap[highestPrediction.className]}" alt="${highestPrediction.className}">`;
+                    } else {
+                        imageContainer.innerHTML = ""; // 該当する画像がない場合は空にする
+                    }
+                    lastChangeTime = currentTime;
+                }
             }
         }
 
